@@ -40,14 +40,14 @@ typedef void* b3EnqueueTaskCallback( b3TaskCallback* task, void* taskContext, vo
 /// @ingroup world
 typedef void b3FinishTaskCallback( void* userTask, void* userContext );
 
-/// Called for each monolithic coupling iteration and once more as a final convergence probe.
-/// Joint/contact constraints are prepared and warm-started before iteration zero. For iteration
-/// indices [0, couplingIterationCount), the callback sees the latest velocity iterate, may commit
-/// externally solved velocities with b3Body_SetCoupledVelocity, and Box3D then applies one native
-/// joint/contact solve. After the final native solve, Box3D calls the callback once with
+/// Called during the two monolithic velocity phases and once more as a final convergence probe.
+/// Box3D first alternates the external block with biased joint/contact solves, integrates position,
+/// applies its native no-bias relaxation and restitution, then alternates the external block with
+/// no-bias joint/contact solves. The callback receives a flattened regular-iteration index in
+/// [0, couplingIterationCount); the first half is the pre-position phase and the second half is the
+/// final-velocity phase. After the last no-bias native solve, Box3D calls the callback once with
 /// couplingIterationIndex == couplingIterationCount. This final probe is read-only:
-/// b3Body_SetCoupledVelocity returns false so an external solver can verify convergence/finalize
-/// state without creating a post-constraint velocity mutation. Structural world mutation is not allowed.
+/// b3Body_SetCoupledVelocity returns false. Structural world mutation is not allowed.
 /// @ingroup world
 typedef void b3VelocityCouplingCallback(
 	b3WorldId worldId, int subStepIndex, int subStepCount, int couplingIterationIndex,

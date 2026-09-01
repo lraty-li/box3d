@@ -1232,6 +1232,8 @@ static void b3SolverTask( void* taskContext )
 		int graphSyncIndex = 1;
 		int subStepCount = context->subStepCount;
 		int solveIterations = context->velocityCouplingCallback != NULL ? context->velocityCouplingIterationCount : ITERATIONS;
+		int coupledCallbackIterationCount = context->velocityCouplingCallback != NULL ? 2 * solveIterations : 0;
+		int solveStageStartIndex = stageIndex + 1 + activeColorCount;
 		for ( int subStepIndex = 0; subStepIndex < subStepCount; ++subStepIndex )
 		{
 			// stageIndex restarted each iteration
@@ -1275,7 +1277,7 @@ static void b3SolverTask( void* taskContext )
 					world->velocityCouplingCommitAllowed = true;
 					b3WorldId worldId = { (uint16_t)( world->worldId + 1 ), world->generation };
 					context->velocityCouplingCallback( worldId, subStepIndex, subStepCount, j,
-						solveIterations, context->h, context->velocityCouplingContext );
+						coupledCallbackIterationCount, context->h, context->velocityCouplingContext );
 					world->velocityCouplingCommitAllowed = false;
 					world->velocityCouplingActive = false;
 				}
@@ -1296,18 +1298,6 @@ static void b3SolverTask( void* taskContext )
 
 			profile->solveImpulses += b3GetMillisecondsAndReset( &ticks );
 
-			// Final read-only external probe sees the velocity after the last native constraint solve.
-			if ( context->velocityCouplingCallback != NULL )
-			{
-				b3World* world = context->world;
-				B3_ASSERT( world->velocityCouplingActive == false );
-				world->velocityCouplingActive = true;
-				world->velocityCouplingCommitAllowed = false;
-				b3WorldId worldId = { (uint16_t)( world->worldId + 1 ), world->generation };
-				context->velocityCouplingCallback( worldId, subStepIndex, subStepCount, solveIterations,
-					solveIterations, context->h, context->velocityCouplingContext );
-				world->velocityCouplingActive = false;
-			}
 
 			// Integrate positions
 			B3_ASSERT( stages[iterationStageIndex].type == b3_stageIntegratePositions );
@@ -1360,6 +1350,48 @@ static void b3SolverTask( void* taskContext )
 		}
 
 		profile->applyRestitution += b3GetMillisecondsAndReset( &ticks );
+
+		// Coupled final-velocity phase. Position stabilization and restitution have already run.
+		// Alternate the external block with no-bias Box3D constraints so the final state satisfies
+		// fluid pressure, joints, contacts, friction, and restitution in the same fixed step.
+		if ( context->velocityCouplingCallback != NULL )
+		{
+			B3_ASSERT( context->subStepCount == 1 );
+			for ( int j = 0; j < solveIterations; ++j )
+			{
+				b3World* world = context->world;
+				B3_ASSERT( world->velocityCouplingActive == false );
+				world->velocityCouplingActive = true;
+				world->velocityCouplingCommitAllowed = true;
+				b3WorldId worldId = { (uint16_t)( world->worldId + 1 ), world->generation };
+				context->velocityCouplingCallback( worldId, 0, 1, solveIterations + j,
+					coupledCallbackIterationCount, context->h, context->velocityCouplingContext );
+				world->velocityCouplingCommitAllowed = false;
+				world->velocityCouplingActive = false;
+
+				b3SolveJoints_Overflow( context, false );
+				b3SolveContacts_Overflow( context, false );
+				int postStageIndex = solveStageStartIndex + j * activeColorCount;
+				for ( int colorIndex = 0; colorIndex < activeColorCount; ++colorIndex )
+				{
+					syncBits = ( graphSyncIndex << 16 ) | postStageIndex;
+					B3_ASSERT( stages[postStageIndex].type == b3_stageSolve );
+					b3ExecuteMainStage( stages + postStageIndex, context, syncBits );
+					postStageIndex += 1;
+				}
+				graphSyncIndex += 1;
+			}
+
+			// No Box3D velocity-changing stage follows this read-only convergence probe.
+			b3World* world = context->world;
+			B3_ASSERT( world->velocityCouplingActive == false );
+			world->velocityCouplingActive = true;
+			world->velocityCouplingCommitAllowed = false;
+			b3WorldId worldId = { (uint16_t)( world->worldId + 1 ), world->generation };
+			context->velocityCouplingCallback( worldId, 0, 1, coupledCallbackIterationCount,
+				coupledCallbackIterationCount, context->h, context->velocityCouplingContext );
+			world->velocityCouplingActive = false;
+		}
 
 		// Store impulses
 		b3StoreImpulses_Overflow( context );

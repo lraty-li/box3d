@@ -52,17 +52,18 @@ B3_API bool b3World_IsValid( b3WorldId id );
 /// @param subStepCount The number of sub-steps, increasing the sub-step count can increase accuracy. Usually 4.
 B3_API void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount );
 
-/// Simulate a world with an external velocity constraint block inside the Box3D joint/contact solve.
-/// Each sub-step integrates external forces once, warm-starts Box3D constraints, then alternates the
-/// external coupling callback and one native joint/contact solve for couplingIterationCount iterations.
-/// A read-only final callback follows the last native solve so the external block can verify convergence.
-/// This lets an external fluid pressure projection and Box3D contacts/joints converge in the same
-/// velocity solve instead of applying either system as a post-process. The callback is synchronous,
-/// runs on the calling thread, and is excluded from recording/replay.
+/// Simulate one rigid sub-step with an external velocity constraint block inside the full Box3D solve.
+/// The coupled path alternates the external block with biased joint/contact solves before position
+/// integration, then includes Box3D relaxation/restitution and alternates the external block with
+/// no-bias joint/contact solves for the final velocity. A read-only final callback verifies the
+/// converged end velocity, after which Box3D performs no further velocity mutation. This lets an
+/// external fluid pressure projection and Box3D joints/contacts/friction/restitution converge inside
+/// the same 120 Hz step instead of applying either system as a post-process. The callback is
+/// synchronous, runs on the calling thread, and is excluded from recording/replay.
 /// @param worldId The world to simulate.
 /// @param timeStep The full fixed step duration.
-/// @param subStepCount The Box3D sub-step count.
-/// @param couplingIterationCount Number of external-fluid/native-constraint block iterations per sub-step.
+/// @param subStepCount Must be 1 for a coupled step; the caller owns the fixed 120 Hz cadence.
+/// @param couplingIterationCount Number of block iterations in each of the pre-position and final-velocity phases.
 /// @param callback Velocity coupling callback. A null callback uses the normal Box3D solve.
 /// @param userContext Opaque pointer forwarded to callback.
 B3_API void b3World_StepWithCoupling( b3WorldId worldId, float timeStep, int subStepCount,

@@ -1380,6 +1380,11 @@ void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
 void b3World_StepWithCoupling( b3WorldId worldId, float timeStep, int subStepCount,
 	int couplingIterationCount, b3VelocityCouplingCallback* callback, void* userContext )
 {
+	B3_ASSERT( callback == NULL || subStepCount == 1 );
+	if ( callback != NULL && subStepCount != 1 )
+	{
+		return;
+	}
 	b3World_StepInternal( worldId, timeStep, subStepCount, couplingIterationCount, callback, userContext );
 }
 
