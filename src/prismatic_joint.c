@@ -112,6 +112,40 @@ float b3PrismaticJoint_GetTranslation( b3JointId jointId )
 	return translation;
 }
 
+bool b3PrismaticJoint_GetCouplingState(
+	b3JointId jointId, b3PrismaticCouplingState* output )
+{
+	if ( output == NULL )
+	{
+		return false;
+	}
+	*output = (b3PrismaticCouplingState){ 0 };
+	b3World* world = b3GetWorld( jointId.world0 );
+	if ( world == NULL || world->velocityCouplingActive == false )
+	{
+		return false;
+	}
+	b3JointSim* base = b3GetJointSimCheckType( jointId, b3_prismaticJoint );
+	b3PrismaticJoint* joint = &base->prismaticJoint;
+	b3SolverSet* awakeSet = b3Array_Get( world->solverSets, b3_awakeSet );
+	b3BodyState dummyState = b3_identityBodyState;
+	b3BodyState* stateA = joint->indexA == B3_NULL_INDEX ? &dummyState : awakeSet->bodyStates.data + joint->indexA;
+	b3BodyState* stateB = joint->indexB == B3_NULL_INDEX ? &dummyState : awakeSet->bodyStates.data + joint->indexB;
+	b3Vec3 rA = b3RotateVector( stateA->deltaRotation, joint->frameA.p );
+	b3Vec3 rB = b3RotateVector( stateB->deltaRotation, joint->frameB.p );
+	b3Vec3 d = b3Add(
+		b3Add( b3Sub( stateB->deltaPosition, stateA->deltaPosition ), joint->deltaCenter ),
+		b3Sub( rB, rA ) );
+	b3Vec3 jointAxis = b3RotateVector( stateA->deltaRotation, joint->jointAxis );
+	output->translation = b3Dot( d, jointAxis );
+	output->lowerTranslation = joint->lowerTranslation;
+	output->upperTranslation = joint->upperTranslation;
+	output->lowerImpulse = joint->lowerImpulse;
+	output->upperImpulse = joint->upperImpulse;
+	output->limitEnabled = joint->enableLimit;
+	return b3IsValidFloat( output->translation );
+}
+
 void b3PrismaticJoint_EnableSpring( b3JointId jointId, bool enableSpring )
 {
 	b3World* world = b3GetWorld( jointId.world0 );

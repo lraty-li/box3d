@@ -53,6 +53,16 @@ typedef void b3VelocityCouplingCallback(
 	b3WorldId worldId, int subStepIndex, int subStepCount, int couplingIterationIndex,
 	int couplingIterationCount, float subStepTime, void* userContext );
 
+typedef struct b3PrismaticCouplingState
+{
+	float translation;
+	float lowerTranslation;
+	float upperTranslation;
+	float lowerImpulse;
+	float upperImpulse;
+	bool limitEnabled;
+} b3PrismaticCouplingState;
+
 typedef struct b3DebugShape b3DebugShape;
 
 /// The user needs to be able to create debug draw shapes for multi-pass rendering to work efficiently.

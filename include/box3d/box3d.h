@@ -1441,6 +1441,11 @@ B3_API float b3PrismaticJoint_GetMotorForce( b3JointId jointId );
 
 /// Get the current joint translation, usually in meters.
 B3_API float b3PrismaticJoint_GetTranslation( b3JointId jointId );
+/// Read the prepared/current prismatic solver state during b3VelocityCouplingCallback.
+/// The translation includes the current solver delta position/rotation. Returns false outside
+/// the coupling callback or when the joint is not an awake prismatic constraint.
+B3_API bool b3PrismaticJoint_GetCouplingState(
+	b3JointId jointId, b3PrismaticCouplingState* state );
 
 /// Get the current joint translation speed, usually in meters per second.
 B3_API float b3PrismaticJoint_GetSpeed( b3JointId jointId );

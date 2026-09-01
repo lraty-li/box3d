@@ -1302,11 +1302,93 @@ static int TestVelocityCouplingAlternatesWithContacts( void )
 	return 0;
 }
 
+
+typedef struct PrismaticCouplingStateTestContext
+{
+	b3JointId jointId;
+	b3BodyId bodyId;
+	int callCount;
+	bool querySucceeded;
+	bool translationMoved;
+	bool limitImpulseObserved;
+} PrismaticCouplingStateTestContext;
+
+static void TestPrismaticCouplingStateCallback(
+	b3WorldId worldId, int subStepIndex, int subStepCount, int couplingIterationIndex,
+	int couplingIterationCount, float subStepTime, void* userContext )
+{
+	(void)worldId;
+	(void)subStepIndex;
+	(void)subStepCount;
+	(void)subStepTime;
+	PrismaticCouplingStateTestContext* context = (PrismaticCouplingStateTestContext*)userContext;
+	b3PrismaticCouplingState state = { 0 };
+	bool ok = b3PrismaticJoint_GetCouplingState( context->jointId, &state );
+	context->querySucceeded = context->querySucceeded && ok && state.limitEnabled &&
+		b3AbsFloat( state.lowerTranslation + 0.1f ) < 1.0e-6f &&
+		b3AbsFloat( state.upperTranslation - 0.1f ) < 1.0e-6f &&
+		b3IsValidFloat( state.translation );
+	context->translationMoved = context->translationMoved || state.translation > 0.075f;
+	context->limitImpulseObserved = context->limitImpulseObserved || state.upperImpulse > 1.0e-6f;
+	context->callCount += 1;
+	if ( couplingIterationIndex < couplingIterationCount )
+	{
+		b3Vec3 velocity = b3Body_GetLinearVelocity( context->bodyId );
+		velocity.x = 2.0f;
+		context->querySucceeded = context->querySucceeded &&
+			b3Body_SetCoupledVelocity( context->bodyId, velocity, b3Vec3_zero );
+	}
+}
+
+static int TestPrismaticCouplingStateMatchesSolver( void )
+{
+	b3WorldDef worldDef = b3DefaultWorldDef();
+	worldDef.gravity = b3Vec3_zero;
+	b3WorldId worldId = b3CreateWorld( &worldDef );
+	b3BodyDef groundDef = b3DefaultBodyDef();
+	b3BodyId groundId = b3CreateBody( worldId, &groundDef );
+	b3BodyDef bodyDef = b3DefaultBodyDef();
+	bodyDef.type = b3_dynamicBody;
+	bodyDef.position = (b3Vec3){ 0.08f, 0.0f, 0.0f };
+	bodyDef.enableSleep = false;
+	b3BodyId bodyId = b3CreateBody( worldId, &bodyDef );
+	b3ShapeDef shapeDef = b3DefaultShapeDef();
+	shapeDef.density = 1.0f;
+	b3BoxHull box = b3MakeCubeHull( 0.05f );
+	b3CreateHullShape( bodyId, &shapeDef, &box.base );
+
+	b3PrismaticJointDef jointDef = b3DefaultPrismaticJointDef();
+	jointDef.base.bodyIdA = groundId;
+	jointDef.base.bodyIdB = bodyId;
+	jointDef.enableLimit = true;
+	jointDef.lowerTranslation = -0.1f;
+	jointDef.upperTranslation = 0.1f;
+	b3JointId jointId = b3CreatePrismaticJoint( worldId, &jointDef );
+	b3PrismaticCouplingState outsideState = { 0 };
+	ENSURE( b3PrismaticJoint_GetCouplingState( jointId, &outsideState ) == false );
+
+	PrismaticCouplingStateTestContext context = { 0 };
+	context.jointId = jointId;
+	context.bodyId = bodyId;
+	context.querySucceeded = true;
+	b3World_StepWithCoupling(
+		worldId, 1.0f / 120.0f, 1, 3, TestPrismaticCouplingStateCallback, &context );
+
+	ENSURE( context.callCount == 7 );
+	ENSURE( context.querySucceeded );
+	ENSURE( context.translationMoved );
+	ENSURE( context.limitImpulseObserved );
+	ENSURE( b3PrismaticJoint_GetCouplingState( jointId, &outsideState ) == false );
+	b3DestroyWorld( worldId );
+	return 0;
+}
+
 int WorldTest( void )
 {
 	RUN_SUBTEST( HelloWorld );
 	RUN_SUBTEST( TestVelocityCouplingStep );
 	RUN_SUBTEST( TestVelocityCouplingAlternatesWithContacts );
+	RUN_SUBTEST( TestPrismaticCouplingStateMatchesSolver );
 	RUN_SUBTEST( EmptyWorld );
 	RUN_SUBTEST( DestroyAllBodiesWorld );
 	RUN_SUBTEST( TestIsValid );
