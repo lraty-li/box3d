@@ -282,8 +282,10 @@ typedef struct b3World
 	// This indicates there is a world write operation in progress. This is for debugging and
 	// not a real mutex. This should have minimal performance impact.
 	bool locked;
-	// True only while the synchronous post-force velocity coupling callback is executing.
+	// True only while the synchronous velocity coupling callback is executing.
 	bool velocityCouplingActive;
+	// False during the final convergence probe after native constraints have solved.
+	bool velocityCouplingCommitAllowed;
 	bool enableWarmStarting;
 	bool enableContinuous;
 	bool enableSpeculative;

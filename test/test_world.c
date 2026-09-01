@@ -1178,14 +1178,15 @@ static void TestVelocityCouplingCallback(
 	context->callCount += 1;
 	context->predictionObserved = context->predictionObserved ||
 		b3Body_GetLinearVelocity( context->bodyId ).y < -1.0e-5f;
-	int expectedCallIndex = subStepIndex * context->expectedCouplingIterationCount + couplingIterationIndex;
+	int expectedCallIndex = subStepIndex * ( context->expectedCouplingIterationCount + 1 ) + couplingIterationIndex;
+	bool commitResult = couplingIterationIndex < couplingIterationCount
+		? b3Body_SetCoupledVelocity( context->bodyId, (b3Vec3){ 3.0f, 0.0f, 0.0f }, b3Vec3_zero )
+		: b3Body_SetCoupledVelocity( context->bodyId, (b3Vec3){ 3.0f, 0.0f, 0.0f }, b3Vec3_zero ) == false;
 	context->commitSucceeded = context->commitSucceeded &&
 		expectedCallIndex == context->callCount - 1 &&
 		subStepCount == context->expectedSubStepCount &&
 		couplingIterationCount == context->expectedCouplingIterationCount &&
-		b3AbsFloat( subStepTime - context->expectedSubStepTime ) < 1.0e-7f &&
-		b3Body_SetCoupledVelocity(
-			context->bodyId, (b3Vec3){ 3.0f, 0.0f, 0.0f }, b3Vec3_zero );
+		b3AbsFloat( subStepTime - context->expectedSubStepTime ) < 1.0e-7f && commitResult;
 }
 
 static int TestVelocityCouplingStep( void )
@@ -1215,7 +1216,7 @@ static int TestVelocityCouplingStep( void )
 		worldId, 1.0f / 60.0f, context.expectedSubStepCount,
 		context.expectedCouplingIterationCount, TestVelocityCouplingCallback, &context );
 
-	ENSURE( context.callCount == 6 );
+	ENSURE( context.callCount == 8 );
 	ENSURE( context.commitSucceeded );
 	ENSURE( context.predictionObserved );
 	b3Vec3 velocity = b3Body_GetLinearVelocity( bodyId );
@@ -1287,13 +1288,14 @@ static int TestVelocityCouplingAlternatesWithContacts( void )
 	b3World_StepWithCoupling(
 		worldId, 1.0f / 60.0f, 1, 3, TestContactCouplingIterationCallback, &context );
 
-	ENSURE( context.callCount == 3 );
+	ENSURE( context.callCount == 4 );
 	ENSURE( context.commitSucceeded );
 	ENSURE( context.observedY[0] > -0.1f );
 	// Iteration zero injects downward velocity. The native contact solve must feed a changed
 	// velocity back into iteration one, proving the external block and contact complementarity
 	// are participating in the same sub-step iteration rather than running as post-processes.
 	ENSURE( context.observedY[1] > -1.5f );
+	ENSURE( context.observedY[3] > -1.5f );
 	ENSURE( b3Body_GetPosition( bodyId ).y > 0.45f );
 
 	b3DestroyWorld( worldId );

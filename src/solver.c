@@ -1272,9 +1272,11 @@ static void b3SolverTask( void* taskContext )
 					b3World* world = context->world;
 					B3_ASSERT( world->velocityCouplingActive == false );
 					world->velocityCouplingActive = true;
+					world->velocityCouplingCommitAllowed = true;
 					b3WorldId worldId = { (uint16_t)( world->worldId + 1 ), world->generation };
 					context->velocityCouplingCallback( worldId, subStepIndex, subStepCount, j,
 						solveIterations, context->h, context->velocityCouplingContext );
+					world->velocityCouplingCommitAllowed = false;
 					world->velocityCouplingActive = false;
 				}
 
@@ -1293,6 +1295,19 @@ static void b3SolverTask( void* taskContext )
 			}
 
 			profile->solveImpulses += b3GetMillisecondsAndReset( &ticks );
+
+			// Final read-only external probe sees the velocity after the last native constraint solve.
+			if ( context->velocityCouplingCallback != NULL )
+			{
+				b3World* world = context->world;
+				B3_ASSERT( world->velocityCouplingActive == false );
+				world->velocityCouplingActive = true;
+				world->velocityCouplingCommitAllowed = false;
+				b3WorldId worldId = { (uint16_t)( world->worldId + 1 ), world->generation };
+				context->velocityCouplingCallback( worldId, subStepIndex, subStepCount, solveIterations,
+					solveIterations, context->h, context->velocityCouplingContext );
+				world->velocityCouplingActive = false;
+			}
 
 			// Integrate positions
 			B3_ASSERT( stages[iterationStageIndex].type == b3_stageIntegratePositions );

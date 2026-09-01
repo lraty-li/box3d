@@ -1218,7 +1218,8 @@ bool b3Body_SetCoupledVelocity( b3BodyId bodyId, b3Vec3 linearVelocity, b3Vec3 a
 	}
 
 	b3World* world = b3GetWorld( bodyId.world0 );
-	if ( world == NULL || world->velocityCouplingActive == false )
+	if ( world == NULL || world->velocityCouplingActive == false ||
+		world->velocityCouplingCommitAllowed == false )
 	{
 		return false;
 	}

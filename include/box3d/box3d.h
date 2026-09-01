@@ -55,6 +55,7 @@ B3_API void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount );
 /// Simulate a world with an external velocity constraint block inside the Box3D joint/contact solve.
 /// Each sub-step integrates external forces once, warm-starts Box3D constraints, then alternates the
 /// external coupling callback and one native joint/contact solve for couplingIterationCount iterations.
+/// A read-only final callback follows the last native solve so the external block can verify convergence.
 /// This lets an external fluid pressure projection and Box3D contacts/joints converge in the same
 /// velocity solve instead of applying either system as a post-process. The callback is synchronous,
 /// runs on the calling thread, and is excluded from recording/replay.
