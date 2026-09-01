@@ -1163,22 +1163,26 @@ typedef struct VelocityCouplingTestContext
 	b3BodyId bodyId;
 	int callCount;
 	int expectedSubStepCount;
+	int expectedCouplingIterationCount;
 	float expectedSubStepTime;
 	bool commitSucceeded;
 	bool predictionObserved;
 } VelocityCouplingTestContext;
 
 static void TestVelocityCouplingCallback(
-	b3WorldId worldId, int subStepIndex, int subStepCount, float subStepTime, void* userContext )
+	b3WorldId worldId, int subStepIndex, int subStepCount, int couplingIterationIndex,
+	int couplingIterationCount, float subStepTime, void* userContext )
 {
 	VelocityCouplingTestContext* context = (VelocityCouplingTestContext*)userContext;
 	(void)worldId;
 	context->callCount += 1;
 	context->predictionObserved = context->predictionObserved ||
 		b3Body_GetLinearVelocity( context->bodyId ).y < -1.0e-5f;
+	int expectedCallIndex = subStepIndex * context->expectedCouplingIterationCount + couplingIterationIndex;
 	context->commitSucceeded = context->commitSucceeded &&
-		subStepIndex == context->callCount - 1 &&
+		expectedCallIndex == context->callCount - 1 &&
 		subStepCount == context->expectedSubStepCount &&
+		couplingIterationCount == context->expectedCouplingIterationCount &&
 		b3AbsFloat( subStepTime - context->expectedSubStepTime ) < 1.0e-7f &&
 		b3Body_SetCoupledVelocity(
 			context->bodyId, (b3Vec3){ 3.0f, 0.0f, 0.0f }, b3Vec3_zero );
@@ -1204,13 +1208,14 @@ static int TestVelocityCouplingStep( void )
 	VelocityCouplingTestContext context = { 0 };
 	context.bodyId = bodyId;
 	context.expectedSubStepCount = 2;
+	context.expectedCouplingIterationCount = 3;
 	context.expectedSubStepTime = 1.0f / 120.0f;
 	context.commitSucceeded = true;
 	b3World_StepWithCoupling(
 		worldId, 1.0f / 60.0f, context.expectedSubStepCount,
-		TestVelocityCouplingCallback, &context );
+		context.expectedCouplingIterationCount, TestVelocityCouplingCallback, &context );
 
-	ENSURE( context.callCount == 2 );
+	ENSURE( context.callCount == 6 );
 	ENSURE( context.commitSucceeded );
 	ENSURE( context.predictionObserved );
 	b3Vec3 velocity = b3Body_GetLinearVelocity( bodyId );
@@ -1226,10 +1231,80 @@ static int TestVelocityCouplingStep( void )
 	return 0;
 }
 
+
+typedef struct ContactCouplingTestContext
+{
+	b3BodyId bodyId;
+	int callCount;
+	float observedY[4];
+	bool commitSucceeded;
+} ContactCouplingTestContext;
+
+static void TestContactCouplingIterationCallback(
+	b3WorldId worldId, int subStepIndex, int subStepCount, int couplingIterationIndex,
+	int couplingIterationCount, float subStepTime, void* userContext )
+{
+	(void)worldId;
+	(void)subStepIndex;
+	(void)subStepCount;
+	(void)subStepTime;
+	ContactCouplingTestContext* context = (ContactCouplingTestContext*)userContext;
+	B3_ASSERT( couplingIterationCount == 3 );
+	context->observedY[couplingIterationIndex] = b3Body_GetLinearVelocity( context->bodyId ).y;
+	context->callCount += 1;
+	if ( couplingIterationIndex == 0 )
+	{
+		b3Vec3 velocity = b3Body_GetLinearVelocity( context->bodyId );
+		velocity.y = -2.0f;
+		context->commitSucceeded = b3Body_SetCoupledVelocity( context->bodyId, velocity, b3Vec3_zero );
+	}
+}
+
+static int TestVelocityCouplingAlternatesWithContacts( void )
+{
+	b3WorldDef worldDef = b3DefaultWorldDef();
+	worldDef.gravity = b3Vec3_zero;
+	b3WorldId worldId = b3CreateWorld( &worldDef );
+
+	b3BodyDef groundDef = b3DefaultBodyDef();
+	groundDef.position = (b3Vec3){ 0.0f, -0.5f, 0.0f };
+	b3BodyId groundId = b3CreateBody( worldId, &groundDef );
+	b3ShapeDef shapeDef = b3DefaultShapeDef();
+	b3BoxHull groundHull = b3MakeBoxHull( 2.0f, 0.5f, 2.0f );
+	b3CreateHullShape( groundId, &shapeDef, &groundHull.base );
+
+	b3BodyDef bodyDef = b3DefaultBodyDef();
+	bodyDef.type = b3_dynamicBody;
+	bodyDef.position = (b3Vec3){ 0.0f, 0.49f, 0.0f };
+	bodyDef.enableSleep = false;
+	b3BodyId bodyId = b3CreateBody( worldId, &bodyDef );
+	b3BoxHull box = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );
+	b3CreateHullShape( bodyId, &shapeDef, &box.base );
+
+	ContactCouplingTestContext context = { 0 };
+	context.bodyId = bodyId;
+	context.commitSucceeded = true;
+	b3World_StepWithCoupling(
+		worldId, 1.0f / 60.0f, 1, 3, TestContactCouplingIterationCallback, &context );
+
+	ENSURE( context.callCount == 3 );
+	ENSURE( context.commitSucceeded );
+	ENSURE( context.observedY[0] > -0.1f );
+	// Iteration zero injects downward velocity. The native contact solve must feed a changed
+	// velocity back into iteration one, proving the external block and contact complementarity
+	// are participating in the same sub-step iteration rather than running as post-processes.
+	ENSURE( context.observedY[1] > -1.5f );
+	ENSURE( b3Body_GetPosition( bodyId ).y > 0.45f );
+
+	b3DestroyWorld( worldId );
+	return 0;
+}
+
 int WorldTest( void )
 {
 	RUN_SUBTEST( HelloWorld );
 	RUN_SUBTEST( TestVelocityCouplingStep );
+	RUN_SUBTEST( TestVelocityCouplingAlternatesWithContacts );
 	RUN_SUBTEST( EmptyWorld );
 	RUN_SUBTEST( DestroyAllBodiesWorld );
 	RUN_SUBTEST( TestIsValid );

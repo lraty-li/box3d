@@ -1231,6 +1231,7 @@ static void b3SolverTask( void* taskContext )
 
 		int graphSyncIndex = 1;
 		int subStepCount = context->subStepCount;
+		int solveIterations = context->velocityCouplingCallback != NULL ? context->velocityCouplingIterationCount : ITERATIONS;
 		for ( int subStepIndex = 0; subStepIndex < subStepCount; ++subStepIndex )
 		{
 			// stageIndex restarted each iteration
@@ -1246,18 +1247,6 @@ static void b3SolverTask( void* taskContext )
 
 			profile->integrateVelocities += b3GetMillisecondsAndReset( &ticks );
 
-			// External coupling sees the force-predicted velocities only after every body block
-			// has completed, and commits velocities before any Box3D constraint impulse is applied.
-			if ( context->velocityCouplingCallback != NULL )
-			{
-				b3World* world = context->world;
-				B3_ASSERT( world->velocityCouplingActive == false );
-				world->velocityCouplingActive = true;
-				b3WorldId worldId = { (uint16_t)( world->worldId + 1 ), world->generation };
-				context->velocityCouplingCallback(
-					worldId, subStepIndex, subStepCount, context->h, context->velocityCouplingContext );
-				world->velocityCouplingActive = false;
-			}
 
 			// Warm start constraints
 			b3WarmStartJoints_Overflow( context );
@@ -1276,8 +1265,19 @@ static void b3SolverTask( void* taskContext )
 
 			// Solve constraints
 			bool useBias = true;
-			for ( int j = 0; j < ITERATIONS; ++j )
+			for ( int j = 0; j < solveIterations; ++j )
 			{
+				if ( context->velocityCouplingCallback != NULL )
+				{
+					b3World* world = context->world;
+					B3_ASSERT( world->velocityCouplingActive == false );
+					world->velocityCouplingActive = true;
+					b3WorldId worldId = { (uint16_t)( world->worldId + 1 ), world->generation };
+					context->velocityCouplingCallback( worldId, subStepIndex, subStepCount, j,
+						solveIterations, context->h, context->velocityCouplingContext );
+					world->velocityCouplingActive = false;
+				}
+
 				// Overflow constraints have lower priority. Typically these are dynamic-vs-dynamic.
 				b3SolveJoints_Overflow( context, useBias );
 				b3SolveContacts_Overflow( context, useBias );
@@ -1325,7 +1325,7 @@ static void b3SolverTask( void* taskContext )
 
 		// Advance the stage according to the sub-stepping tasks just completed
 		// integrate velocities / warm start / solve / integrate positions / relax
-		stageIndex += 1 + activeColorCount + ITERATIONS * activeColorCount + 1 + RELAX_ITERATIONS * activeColorCount;
+		stageIndex += 1 + activeColorCount + solveIterations * activeColorCount + 1 + RELAX_ITERATIONS * activeColorCount;
 
 		// Restitution
 		for ( int iteration = 0; iteration < B3_RESTITUTION_ITERATIONS; ++iteration )
@@ -1687,6 +1687,8 @@ void b3Solve( b3World* world, b3StepContext* stepContext )
 		overflowSpans[1].count = 0;
 		overflowSpans[1].contacts = NULL;
 
+		int solveIterations = stepContext->velocityCouplingCallback != NULL ?
+			stepContext->velocityCouplingIterationCount : ITERATIONS;
 		int stageCount = 0;
 
 		// b3_stagePrepareJoints
@@ -1700,7 +1702,7 @@ void b3Solve( b3World* world, b3StepContext* stepContext )
 		// b3_stageWarmStart
 		stageCount += activeColorCount;
 		// b3_stageSolve
-		stageCount += ITERATIONS * activeColorCount;
+		stageCount += solveIterations * activeColorCount;
 		// b3_stageIntegratePositions
 		stageCount += 1;
 		// b3_stageRelax
@@ -1785,7 +1787,7 @@ void b3Solve( b3World* world, b3StepContext* stepContext )
 		stage = b3InitStage( stage, b3_stageIntegrateVelocities, bodyBlocks, bodyDim.count, UINT8_MAX );
 		stage = b3InitColorStages( stage, b3_stageWarmStart, 1, activeColorCount, graphColorBlocks, graphBlockCounts,
 								   activeColorIndices );
-		stage = b3InitColorStages( stage, b3_stageSolve, ITERATIONS, activeColorCount, graphColorBlocks, graphBlockCounts,
+		stage = b3InitColorStages( stage, b3_stageSolve, solveIterations, activeColorCount, graphColorBlocks, graphBlockCounts,
 								   activeColorIndices );
 		stage = b3InitStage( stage, b3_stageIntegratePositions, bodyBlocks, bodyDim.count, UINT8_MAX );
 		stage = b3InitColorStages( stage, b3_stageRelax, RELAX_ITERATIONS, activeColorCount, graphColorBlocks, graphBlockCounts,

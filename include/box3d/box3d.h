@@ -52,17 +52,20 @@ B3_API bool b3World_IsValid( b3WorldId id );
 /// @param subStepCount The number of sub-steps, increasing the sub-step count can increase accuracy. Usually 4.
 B3_API void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount );
 
-/// Simulate a world while exposing the post-force/pre-constraint velocity state once per sub-step.
-/// This is intended for monolithic coupling to an external solver. The callback is synchronous and
-/// runs on the calling thread. It may read body state and may only modify awake dynamic-body
-/// velocities through b3Body_SetCoupledVelocity. The callback is not part of recording/replay.
+/// Simulate a world with an external velocity constraint block inside the Box3D joint/contact solve.
+/// Each sub-step integrates external forces once, warm-starts Box3D constraints, then alternates the
+/// external coupling callback and one native joint/contact solve for couplingIterationCount iterations.
+/// This lets an external fluid pressure projection and Box3D contacts/joints converge in the same
+/// velocity solve instead of applying either system as a post-process. The callback is synchronous,
+/// runs on the calling thread, and is excluded from recording/replay.
 /// @param worldId The world to simulate.
 /// @param timeStep The full fixed step duration.
 /// @param subStepCount The Box3D sub-step count.
-/// @param callback Optional velocity coupling callback. Null is equivalent to b3World_Step.
+/// @param couplingIterationCount Number of external-fluid/native-constraint block iterations per sub-step.
+/// @param callback Velocity coupling callback. A null callback uses the normal Box3D solve.
 /// @param userContext Opaque pointer forwarded to callback.
 B3_API void b3World_StepWithCoupling( b3WorldId worldId, float timeStep, int subStepCount,
-	b3VelocityCouplingCallback* callback, void* userContext );
+	int couplingIterationCount, b3VelocityCouplingCallback* callback, void* userContext );
 
 /// Call this to draw shapes and other debug draw data
 B3_API void b3World_Draw( b3WorldId worldId, b3DebugDraw* draw, uint64_t maskBits );

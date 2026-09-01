@@ -196,9 +196,10 @@ typedef struct b3StepContext
 	struct b3World* world;
 	struct b3ConstraintGraph* graph;
 
-	// Optional synchronous external velocity coupling, called after force prediction and before constraints.
+	// Optional synchronous external velocity block alternated with native joint/contact solves.
 	b3VelocityCouplingCallback* velocityCouplingCallback;
 	void* velocityCouplingContext;
+	int velocityCouplingIterationCount;
 
 	// shortcut to body states from awake set
 	b3BodyState* states;
