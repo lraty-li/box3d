@@ -137,13 +137,20 @@ bool b3PrismaticJoint_GetCouplingState(
 		b3Add( b3Sub( stateB->deltaPosition, stateA->deltaPosition ), joint->deltaCenter ),
 		b3Sub( rB, rA ) );
 	b3Vec3 jointAxis = b3RotateVector( stateA->deltaRotation, joint->jointAxis );
+	b3Vec3 sAx = b3Cross( b3Add( rA, d ), jointAxis );
+	b3Vec3 sBx = b3Cross( rB, jointAxis );
+	float inverseEffectiveMass = base->invMassA + base->invMassB +
+		b3Dot( sAx, b3MulMV( base->invIA, sAx ) ) +
+		b3Dot( sBx, b3MulMV( base->invIB, sBx ) );
 	output->translation = b3Dot( d, jointAxis );
+	output->effectiveMass = inverseEffectiveMass > 0.0f ? 1.0f / inverseEffectiveMass : 0.0f;
 	output->lowerTranslation = joint->lowerTranslation;
 	output->upperTranslation = joint->upperTranslation;
 	output->lowerImpulse = joint->lowerImpulse;
 	output->upperImpulse = joint->upperImpulse;
 	output->limitEnabled = joint->enableLimit;
-	return b3IsValidFloat( output->translation );
+	return b3IsValidFloat( output->translation ) &&
+		b3IsValidFloat( output->effectiveMass ) && output->effectiveMass > 0.0f;
 }
 
 void b3PrismaticJoint_EnableSpring( b3JointId jointId, bool enableSpring )

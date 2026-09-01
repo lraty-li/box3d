@@ -1325,6 +1325,7 @@ static void TestPrismaticCouplingStateCallback(
 	b3PrismaticCouplingState state = { 0 };
 	bool ok = b3PrismaticJoint_GetCouplingState( context->jointId, &state );
 	context->querySucceeded = context->querySucceeded && ok && state.limitEnabled &&
+		state.effectiveMass > 0.0f &&
 		b3AbsFloat( state.lowerTranslation + 0.1f ) < 1.0e-6f &&
 		b3AbsFloat( state.upperTranslation - 0.1f ) < 1.0e-6f &&
 		b3IsValidFloat( state.translation );

@@ -56,6 +56,7 @@ typedef void b3VelocityCouplingCallback(
 typedef struct b3PrismaticCouplingState
 {
 	float translation;
+	float effectiveMass;
 	float lowerTranslation;
 	float upperTranslation;
 	float lowerImpulse;
