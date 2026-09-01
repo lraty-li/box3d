@@ -1325,7 +1325,7 @@ static void TestPrismaticCouplingStateCallback(
 	b3PrismaticCouplingState state = { 0 };
 	bool ok = b3PrismaticJoint_GetCouplingState( context->jointId, &state );
 	context->querySucceeded = context->querySucceeded && ok && state.limitEnabled &&
-		state.effectiveMass > 0.0f &&
+		b3IsValidFloat( state.speed ) && state.effectiveMass > 0.0f &&
 		b3AbsFloat( state.lowerTranslation + 0.1f ) < 1.0e-6f &&
 		b3AbsFloat( state.upperTranslation - 0.1f ) < 1.0e-6f &&
 		b3IsValidFloat( state.translation );
@@ -1334,10 +1334,12 @@ static void TestPrismaticCouplingStateCallback(
 	context->callCount += 1;
 	if ( couplingIterationIndex < couplingIterationCount )
 	{
-		b3Vec3 velocity = b3Body_GetLinearVelocity( context->bodyId );
-		velocity.x = 2.0f;
 		context->querySucceeded = context->querySucceeded &&
-			b3Body_SetCoupledVelocity( context->bodyId, velocity, b3Vec3_zero );
+			b3PrismaticJoint_SetCoupledSpeed( context->jointId, 2.0f );
+		b3PrismaticCouplingState committed = { 0 };
+		context->querySucceeded = context->querySucceeded &&
+			b3PrismaticJoint_GetCouplingState( context->jointId, &committed ) &&
+			b3AbsFloat( committed.speed - 2.0f ) < 1.0e-5f;
 	}
 }
 
@@ -1367,6 +1369,7 @@ static int TestPrismaticCouplingStateMatchesSolver( void )
 	b3JointId jointId = b3CreatePrismaticJoint( worldId, &jointDef );
 	b3PrismaticCouplingState outsideState = { 0 };
 	ENSURE( b3PrismaticJoint_GetCouplingState( jointId, &outsideState ) == false );
+	ENSURE( b3PrismaticJoint_SetCoupledSpeed( jointId, 1.0f ) == false );
 
 	PrismaticCouplingStateTestContext context = { 0 };
 	context.jointId = jointId;
@@ -1380,6 +1383,7 @@ static int TestPrismaticCouplingStateMatchesSolver( void )
 	ENSURE( context.translationMoved );
 	ENSURE( context.limitImpulseObserved );
 	ENSURE( b3PrismaticJoint_GetCouplingState( jointId, &outsideState ) == false );
+	ENSURE( b3PrismaticJoint_SetCoupledSpeed( jointId, 1.0f ) == false );
 	b3DestroyWorld( worldId );
 	return 0;
 }

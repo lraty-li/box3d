@@ -1446,6 +1446,10 @@ B3_API float b3PrismaticJoint_GetTranslation( b3JointId jointId );
 /// the coupling callback or when the joint is not an awake prismatic constraint.
 B3_API bool b3PrismaticJoint_GetCouplingState(
 	b3JointId jointId, b3PrismaticCouplingState* state );
+/// Set the prepared prismatic generalized speed during a writable coupling callback.
+/// This applies the exact mass-metric J^T impulse used by the native prismatic axial row,
+/// including its angular lever-arm response. Returns false outside a writable coupling callback.
+B3_API bool b3PrismaticJoint_SetCoupledSpeed( b3JointId jointId, float speed );
 
 /// Get the current joint translation speed, usually in meters per second.
 B3_API float b3PrismaticJoint_GetSpeed( b3JointId jointId );

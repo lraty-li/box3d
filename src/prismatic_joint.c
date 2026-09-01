@@ -142,15 +142,75 @@ bool b3PrismaticJoint_GetCouplingState(
 	float inverseEffectiveMass = base->invMassA + base->invMassB +
 		b3Dot( sAx, b3MulMV( base->invIA, sAx ) ) +
 		b3Dot( sBx, b3MulMV( base->invIB, sBx ) );
+	b3Vec3 vRel = b3Sub(
+		b3Sub( b3Add( stateB->linearVelocity, b3Cross( stateB->angularVelocity, rB ) ),
+			stateA->linearVelocity ),
+		b3Cross( stateA->angularVelocity, b3Add( rA, d ) ) );
 	output->translation = b3Dot( d, jointAxis );
+	output->speed = b3Dot( vRel, jointAxis );
 	output->effectiveMass = inverseEffectiveMass > 0.0f ? 1.0f / inverseEffectiveMass : 0.0f;
 	output->lowerTranslation = joint->lowerTranslation;
 	output->upperTranslation = joint->upperTranslation;
 	output->lowerImpulse = joint->lowerImpulse;
 	output->upperImpulse = joint->upperImpulse;
 	output->limitEnabled = joint->enableLimit;
-	return b3IsValidFloat( output->translation ) &&
+	return b3IsValidFloat( output->translation ) && b3IsValidFloat( output->speed ) &&
 		b3IsValidFloat( output->effectiveMass ) && output->effectiveMass > 0.0f;
+}
+
+bool b3PrismaticJoint_SetCoupledSpeed( b3JointId jointId, float targetSpeed )
+{
+	if ( b3IsValidFloat( targetSpeed ) == false )
+	{
+		return false;
+	}
+	b3World* world = b3GetWorld( jointId.world0 );
+	if ( world == NULL || world->velocityCouplingActive == false ||
+		world->velocityCouplingCommitAllowed == false )
+	{
+		return false;
+	}
+	b3JointSim* base = b3GetJointSimCheckType( jointId, b3_prismaticJoint );
+	b3PrismaticJoint* joint = &base->prismaticJoint;
+	b3SolverSet* awakeSet = b3Array_Get( world->solverSets, b3_awakeSet );
+	b3BodyState dummyState = b3_identityBodyState;
+	b3BodyState* stateA = joint->indexA == B3_NULL_INDEX ? &dummyState : awakeSet->bodyStates.data + joint->indexA;
+	b3BodyState* stateB = joint->indexB == B3_NULL_INDEX ? &dummyState : awakeSet->bodyStates.data + joint->indexB;
+	b3Vec3 rA = b3RotateVector( stateA->deltaRotation, joint->frameA.p );
+	b3Vec3 rB = b3RotateVector( stateB->deltaRotation, joint->frameB.p );
+	b3Vec3 d = b3Add(
+		b3Add( b3Sub( stateB->deltaPosition, stateA->deltaPosition ), joint->deltaCenter ),
+		b3Sub( rB, rA ) );
+	b3Vec3 jointAxis = b3RotateVector( stateA->deltaRotation, joint->jointAxis );
+	b3Vec3 sAx = b3Cross( b3Add( rA, d ), jointAxis );
+	b3Vec3 sBx = b3Cross( rB, jointAxis );
+	float inverseEffectiveMass = base->invMassA + base->invMassB +
+		b3Dot( sAx, b3MulMV( base->invIA, sAx ) ) +
+		b3Dot( sBx, b3MulMV( base->invIB, sBx ) );
+	if ( inverseEffectiveMass <= 0.0f )
+	{
+		return false;
+	}
+	b3Vec3 vRel = b3Sub(
+		b3Sub( b3Add( stateB->linearVelocity, b3Cross( stateB->angularVelocity, rB ) ),
+			stateA->linearVelocity ),
+		b3Cross( stateA->angularVelocity, b3Add( rA, d ) ) );
+	float currentSpeed = b3Dot( vRel, jointAxis );
+	float impulse = ( targetSpeed - currentSpeed ) / inverseEffectiveMass;
+	b3Vec3 P = b3MulSV( impulse, jointAxis );
+	b3Vec3 LA = b3MulSV( impulse, sAx );
+	b3Vec3 LB = b3MulSV( impulse, sBx );
+	if ( stateA->flags & b3_dynamicFlag )
+	{
+		stateA->linearVelocity = b3MulSub( stateA->linearVelocity, base->invMassA, P );
+		stateA->angularVelocity = b3Sub( stateA->angularVelocity, b3MulMV( base->invIA, LA ) );
+	}
+	if ( stateB->flags & b3_dynamicFlag )
+	{
+		stateB->linearVelocity = b3MulAdd( stateB->linearVelocity, base->invMassB, P );
+		stateB->angularVelocity = b3Add( stateB->angularVelocity, b3MulMV( base->invIB, LB ) );
+	}
+	return true;
 }
 
 void b3PrismaticJoint_EnableSpring( b3JointId jointId, bool enableSpring )
