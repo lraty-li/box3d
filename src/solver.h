@@ -52,6 +52,7 @@
 #include "core.h"
 
 #include "box3d/math_functions.h"
+#include "box3d/types.h"
 
 #include <stdint.h>
 
@@ -194,6 +195,10 @@ typedef struct b3StepContext
 
 	struct b3World* world;
 	struct b3ConstraintGraph* graph;
+
+	// Optional synchronous external velocity coupling, called after force prediction and before constraints.
+	b3VelocityCouplingCallback* velocityCouplingCallback;
+	void* velocityCouplingContext;
 
 	// shortcut to body states from awake set
 	b3BodyState* states;

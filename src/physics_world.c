@@ -1031,7 +1031,8 @@ static void b3Collide( b3StepContext* context )
 	b3TracyCZoneEnd( collide );
 }
 
-void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
+static void b3World_StepInternal( b3WorldId worldId, float timeStep, int subStepCount,
+	b3VelocityCouplingCallback* velocityCouplingCallback, void* velocityCouplingContext )
 {
 	b3World* world = b3GetUnlockedWorldFromId( worldId );
 	if ( world == NULL )
@@ -1039,7 +1040,11 @@ void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
 		return;
 	}
 
-	B3_REC( world, Step, worldId, timeStep, subStepCount );
+	// Coupled steps deliberately bypass recording because replay cannot reproduce an external solver callback.
+	if ( velocityCouplingCallback == NULL )
+	{
+		B3_REC( world, Step, worldId, timeStep, subStepCount );
+	}
 
 	world->locked = true;
 
@@ -1099,6 +1104,8 @@ void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
 
 	b3StepContext context = { 0 };
 	context.world = world;
+	context.velocityCouplingCallback = velocityCouplingCallback;
+	context.velocityCouplingContext = velocityCouplingContext;
 	context.states = awakeSet->bodyStates.data;
 	context.dt = timeStep;
 	context.subStepCount = b3MaxInt( 1, subStepCount );
@@ -1362,6 +1369,17 @@ static bool DrawQueryCallback( int proxyId, uint64_t userData, void* context )
 	}
 
 	return true;
+}
+
+void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
+{
+	b3World_StepInternal( worldId, timeStep, subStepCount, NULL, NULL );
+}
+
+void b3World_StepWithCoupling( b3WorldId worldId, float timeStep, int subStepCount,
+	b3VelocityCouplingCallback* callback, void* userContext )
+{
+	b3World_StepInternal( worldId, timeStep, subStepCount, callback, userContext );
 }
 
 void b3World_Draw( b3WorldId worldId, b3DebugDraw* draw, uint64_t maskBits )

@@ -1158,9 +1158,78 @@ static int TestContinuousMoveEvent( void )
 	return 0;
 }
 
+typedef struct VelocityCouplingTestContext
+{
+	b3BodyId bodyId;
+	int callCount;
+	int expectedSubStepCount;
+	float expectedSubStepTime;
+	bool commitSucceeded;
+	bool predictionObserved;
+} VelocityCouplingTestContext;
+
+static void TestVelocityCouplingCallback(
+	b3WorldId worldId, int subStepIndex, int subStepCount, float subStepTime, void* userContext )
+{
+	VelocityCouplingTestContext* context = (VelocityCouplingTestContext*)userContext;
+	(void)worldId;
+	context->callCount += 1;
+	context->predictionObserved = context->predictionObserved ||
+		b3Body_GetLinearVelocity( context->bodyId ).y < -1.0e-5f;
+	context->commitSucceeded = context->commitSucceeded &&
+		subStepIndex == context->callCount - 1 &&
+		subStepCount == context->expectedSubStepCount &&
+		b3AbsFloat( subStepTime - context->expectedSubStepTime ) < 1.0e-7f &&
+		b3Body_SetCoupledVelocity(
+			context->bodyId, (b3Vec3){ 3.0f, 0.0f, 0.0f }, b3Vec3_zero );
+}
+
+static int TestVelocityCouplingStep( void )
+{
+	b3WorldDef worldDef = b3DefaultWorldDef();
+	worldDef.gravity = (b3Vec3){ 0.0f, -10.0f, 0.0f };
+	b3WorldId worldId = b3CreateWorld( &worldDef );
+
+	b3BodyDef bodyDef = b3DefaultBodyDef();
+	bodyDef.type = b3_dynamicBody;
+	bodyDef.gravityScale = 1.0f;
+	b3BodyId bodyId = b3CreateBody( worldId, &bodyDef );
+	b3ShapeDef shapeDef = b3DefaultShapeDef();
+	shapeDef.density = 1.0f;
+	b3BoxHull box = b3MakeCubeHull( 0.5f );
+	b3CreateHullShape( bodyId, &shapeDef, &box.base );
+
+	ENSURE( b3Body_SetCoupledVelocity( bodyId, b3Vec3_zero, b3Vec3_zero ) == false );
+
+	VelocityCouplingTestContext context = { 0 };
+	context.bodyId = bodyId;
+	context.expectedSubStepCount = 2;
+	context.expectedSubStepTime = 1.0f / 120.0f;
+	context.commitSucceeded = true;
+	b3World_StepWithCoupling(
+		worldId, 1.0f / 60.0f, context.expectedSubStepCount,
+		TestVelocityCouplingCallback, &context );
+
+	ENSURE( context.callCount == 2 );
+	ENSURE( context.commitSucceeded );
+	ENSURE( context.predictionObserved );
+	b3Vec3 velocity = b3Body_GetLinearVelocity( bodyId );
+	ENSURE_SMALL( velocity.x - 3.0f, 1.0e-5f );
+	ENSURE_SMALL( velocity.y, 1.0e-5f );
+	ENSURE_SMALL( velocity.z, 1.0e-5f );
+	b3Pos position = b3Body_GetPosition( bodyId );
+	ENSURE_SMALL( position.x - 0.05f, 1.0e-4f );
+	ENSURE_SMALL( position.y, 1.0e-4f );
+	ENSURE( b3Body_SetCoupledVelocity( bodyId, b3Vec3_zero, b3Vec3_zero ) == false );
+
+	b3DestroyWorld( worldId );
+	return 0;
+}
+
 int WorldTest( void )
 {
 	RUN_SUBTEST( HelloWorld );
+	RUN_SUBTEST( TestVelocityCouplingStep );
 	RUN_SUBTEST( EmptyWorld );
 	RUN_SUBTEST( DestroyAllBodiesWorld );
 	RUN_SUBTEST( TestIsValid );

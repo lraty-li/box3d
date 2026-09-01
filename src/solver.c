@@ -1246,6 +1246,19 @@ static void b3SolverTask( void* taskContext )
 
 			profile->integrateVelocities += b3GetMillisecondsAndReset( &ticks );
 
+			// External coupling sees the force-predicted velocities only after every body block
+			// has completed, and commits velocities before any Box3D constraint impulse is applied.
+			if ( context->velocityCouplingCallback != NULL )
+			{
+				b3World* world = context->world;
+				B3_ASSERT( world->velocityCouplingActive == false );
+				world->velocityCouplingActive = true;
+				b3WorldId worldId = { (uint16_t)( world->worldId + 1 ), world->generation };
+				context->velocityCouplingCallback(
+					worldId, subStepIndex, subStepCount, context->h, context->velocityCouplingContext );
+				world->velocityCouplingActive = false;
+			}
+
 			// Warm start constraints
 			b3WarmStartJoints_Overflow( context );
 			b3WarmStartContacts_Overflow( context );
@@ -1822,7 +1835,12 @@ void b3Solve( b3World* world, b3StepContext* stepContext )
 			workerContext[i].context = stepContext;
 			workerContext[i].workerIndex = i;
 
-			if ( world->taskCount < B3_MAX_TASKS )
+			if ( i == 0 && stepContext->velocityCouplingCallback != NULL )
+			{
+				// The external solver may have caller-thread affinity. Keep worker 0 on the calling thread.
+				workerContext[i].userTask = NULL;
+			}
+			else if ( world->taskCount < B3_MAX_TASKS )
 			{
 				char buffer[16];
 				snprintf( buffer, sizeof( buffer ), "solve[%d]", i );

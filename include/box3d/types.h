@@ -40,6 +40,16 @@ typedef void* b3EnqueueTaskCallback( b3TaskCallback* task, void* taskContext, vo
 /// @ingroup world
 typedef void b3FinishTaskCallback( void* userTask, void* userContext );
 
+/// Called once per rigid-body sub-step after external forces, gravity, damping, and gyroscopic
+/// prediction have updated awake body velocities, but before warm starting, joint/contact
+/// constraints, and position integration. The callback runs synchronously on the thread that
+/// called b3World_StepWithCoupling. During this callback, predicted velocities can be read with
+/// the normal body getters and committed with b3Body_SetCoupledVelocity. Structural world
+/// mutation is not allowed.
+/// @ingroup world
+typedef void b3VelocityCouplingCallback(
+	b3WorldId worldId, int subStepIndex, int subStepCount, float subStepTime, void* userContext );
+
 typedef struct b3DebugShape b3DebugShape;
 
 /// The user needs to be able to create debug draw shapes for multi-pass rendering to work efficiently.

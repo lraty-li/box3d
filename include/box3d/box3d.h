@@ -52,6 +52,18 @@ B3_API bool b3World_IsValid( b3WorldId id );
 /// @param subStepCount The number of sub-steps, increasing the sub-step count can increase accuracy. Usually 4.
 B3_API void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount );
 
+/// Simulate a world while exposing the post-force/pre-constraint velocity state once per sub-step.
+/// This is intended for monolithic coupling to an external solver. The callback is synchronous and
+/// runs on the calling thread. It may read body state and may only modify awake dynamic-body
+/// velocities through b3Body_SetCoupledVelocity. The callback is not part of recording/replay.
+/// @param worldId The world to simulate.
+/// @param timeStep The full fixed step duration.
+/// @param subStepCount The Box3D sub-step count.
+/// @param callback Optional velocity coupling callback. Null is equivalent to b3World_Step.
+/// @param userContext Opaque pointer forwarded to callback.
+B3_API void b3World_StepWithCoupling( b3WorldId worldId, float timeStep, int subStepCount,
+	b3VelocityCouplingCallback* callback, void* userContext );
+
 /// Call this to draw shapes and other debug draw data
 B3_API void b3World_Draw( b3WorldId worldId, b3DebugDraw* draw, uint64_t maskBits );
 
@@ -553,6 +565,12 @@ B3_API void b3Body_SetLinearVelocity( b3BodyId bodyId, b3Vec3 linearVelocity );
 
 /// Set the angular velocity of a body in radians per second.
 B3_API void b3Body_SetAngularVelocity( b3BodyId bodyId, b3Vec3 angularVelocity );
+
+/// Commit externally coupled linear/angular velocity during b3VelocityCouplingCallback.
+/// Returns false outside the coupling callback or when the body is not an awake dynamic body.
+/// Motion locks are applied immediately. Position integration and Box3D constraints still run
+/// after the committed velocity.
+B3_API bool b3Body_SetCoupledVelocity( b3BodyId bodyId, b3Vec3 linearVelocity, b3Vec3 angularVelocity );
 
 /// Set the velocity to reach the given transform after a given time step.
 /// The result will be close but maybe not exact. This is meant for kinematic bodies.

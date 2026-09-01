@@ -1210,6 +1210,37 @@ void b3Body_SetAngularVelocity( b3BodyId bodyId, b3Vec3 angularVelocity )
 	state->angularVelocity = w;
 }
 
+bool b3Body_SetCoupledVelocity( b3BodyId bodyId, b3Vec3 linearVelocity, b3Vec3 angularVelocity )
+{
+	if ( b3IsValidVec3( linearVelocity ) == false || b3IsValidVec3( angularVelocity ) == false )
+	{
+		return false;
+	}
+
+	b3World* world = b3GetWorld( bodyId.world0 );
+	if ( world == NULL || world->velocityCouplingActive == false )
+	{
+		return false;
+	}
+
+	b3Body* body = b3GetBodyFullId( world, bodyId );
+	if ( body->type != b3_dynamicBody || body->setIndex != b3_awakeSet )
+	{
+		return false;
+	}
+
+	b3BodyState* state = b3GetBodyState( world, body );
+	B3_ASSERT( state != NULL );
+
+	state->linearVelocity.x = ( body->flags & b3_lockLinearX ) ? 0.0f : linearVelocity.x;
+	state->linearVelocity.y = ( body->flags & b3_lockLinearY ) ? 0.0f : linearVelocity.y;
+	state->linearVelocity.z = ( body->flags & b3_lockLinearZ ) ? 0.0f : linearVelocity.z;
+	state->angularVelocity.x = ( body->flags & b3_lockAngularX ) ? 0.0f : angularVelocity.x;
+	state->angularVelocity.y = ( body->flags & b3_lockAngularY ) ? 0.0f : angularVelocity.y;
+	state->angularVelocity.z = ( body->flags & b3_lockAngularZ ) ? 0.0f : angularVelocity.z;
+	return true;
+}
+
 void b3Body_SetTargetTransform( b3BodyId bodyId, b3WorldTransform target, float timeStep, bool wake )
 {
 	B3_ASSERT( b3IsValidWorldTransform( target ) );
